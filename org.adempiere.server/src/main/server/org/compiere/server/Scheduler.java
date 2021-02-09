@@ -42,19 +42,19 @@ import org.compiere.model.MRole;
 import org.compiere.model.MScheduler;
 import org.compiere.model.MSchedulerLog;
 import org.compiere.model.MSchedulerPara;
+import org.compiere.model.MSession;
 import org.compiere.model.MUser;
 import org.compiere.print.MPrintFormat;
 import org.compiere.process.ProcessInfo;
 import org.compiere.process.ProcessInfoUtil;
 import org.compiere.process.ServerProcessCtl;
-import org.compiere.util.CCache;
 import org.compiere.util.DB;
 import org.compiere.util.DisplayType;
 import org.compiere.util.Env;
 import org.compiere.util.TimeUtil;
 import org.compiere.util.Trx;
 import org.compiere.util.Util;
-
+import org.idempiere.cache.ImmutableIntPOCache;
 
 /**
  *	Scheduler
@@ -85,7 +85,7 @@ public class Scheduler extends AdempiereServer
 
 	protected int AD_Scheduler_ID;
 
-	private static CCache<Integer,MScheduler> s_cache = new CCache<Integer,MScheduler>(MScheduler.Table_Name, 10, 60, true);
+	private static ImmutableIntPOCache<Integer,MScheduler> s_cache = new ImmutableIntPOCache<Integer,MScheduler>(MScheduler.Table_Name, 10, 60, true);
 
 	/**
 	 * 	Work
@@ -98,25 +98,27 @@ public class Scheduler extends AdempiereServer
 
 		// Prepare a ctx for the report/process - BF [1966880]
 		MClient schedclient = MClient.get(getCtx(), scheduler.getAD_Client_ID());
-		Env.setContext(getCtx(), "#AD_Client_ID", schedclient.getAD_Client_ID());
-		Env.setContext(getCtx(), "#AD_Language", schedclient.getAD_Language());
-		Env.setContext(getCtx(), "#AD_Org_ID", scheduler.getAD_Org_ID());
+		Env.setContext(getCtx(), Env.AD_CLIENT_ID, schedclient.getAD_Client_ID());
+		Env.setContext(getCtx(), Env.LANGUAGE, schedclient.getAD_Language());
+		Env.setContext(getCtx(), Env.AD_ORG_ID, scheduler.getAD_Org_ID());
 		if (scheduler.getAD_Org_ID() != 0) {
 			MOrgInfo schedorg = MOrgInfo.get(getCtx(), scheduler.getAD_Org_ID(), null);
 			if (schedorg.getM_Warehouse_ID() > 0)
-				Env.setContext(getCtx(), "#M_Warehouse_ID", schedorg.getM_Warehouse_ID());
+				Env.setContext(getCtx(), Env.M_WAREHOUSE_ID, schedorg.getM_Warehouse_ID());
 		}
-		Env.setContext(getCtx(), "#AD_User_ID", getAD_User_ID());
-		Env.setContext(getCtx(), "#SalesRep_ID", getAD_User_ID());
+		Env.setContext(getCtx(), Env.AD_USER_ID, getAD_User_ID());
+		Env.setContext(getCtx(), Env.SALESREP_ID, getAD_User_ID());
 		// TODO: It can be convenient to add  AD_Scheduler.AD_Role_ID
 		MUser scheduser = MUser.get(getCtx(), getAD_User_ID());
 		MRole[] schedroles = scheduser.getRoles(scheduler.getAD_Org_ID());
 		if (schedroles != null && schedroles.length > 0)
-			Env.setContext(getCtx(), "#AD_Role_ID", schedroles[0].getAD_Role_ID()); // first role, ordered by AD_Role_ID
+			Env.setContext(getCtx(), Env.AD_ROLE_ID, schedroles[0].getAD_Role_ID()); // first role, ordered by AD_Role_ID
 		Timestamp ts = new Timestamp(System.currentTimeMillis());
 		SimpleDateFormat dateFormat4Timestamp = new SimpleDateFormat("yyyy-MM-dd"); 
-		Env.setContext(getCtx(), "#Date", dateFormat4Timestamp.format(ts)+" 00:00:00" );    //  JDBC format
+		Env.setContext(getCtx(), Env.DATE, dateFormat4Timestamp.format(ts)+" 00:00:00" );    //  JDBC format
 
+		//Create new Session and set #AD_Session_ID to context
+		MSession session = MSession.get(getCtx(), true);
 		MProcess process = new MProcess(getCtx(), scheduler.getAD_Process_ID(), null);
 		try
 		{
@@ -136,6 +138,9 @@ public class Scheduler extends AdempiereServer
 		{
 			if (m_trx != null)
 				m_trx.close();
+
+			session.logout();
+			getCtx().remove(Env.AD_SESSION_ID);
 		}
 		
 		//
@@ -307,7 +312,7 @@ public class Scheduler extends AdempiereServer
 						mailContent = scheduler.getDescription();
 					}else{
 						mailTemplate.setUser(user);
-						mailTemplate.setLanguage(Env.getContext(getCtx(), "#AD_Language"));
+						mailTemplate.setLanguage(Env.getContext(getCtx(), Env.LANGUAGE));
 						// if user has bpartner link. maybe use language depend user
 						mailContent = mailTemplate.getMailText(true);
 						schedulerName = mailTemplate.getMailHeader();
@@ -550,7 +555,7 @@ public class Scheduler extends AdempiereServer
 			else
 				value = env;
 			
-			if (tail != null && columnName.equals("#Date"))
+			if (tail != null && columnName.equals(Env.DATE))
 			{
 				tail = tail.trim();
 				if (tail.startsWith("-") || tail.startsWith("+"))
@@ -605,6 +610,7 @@ public class Scheduler extends AdempiereServer
 	}	//	getServerInfo
 
 	/**
+	 * Get MScheduler from cache (immutable)
 	 * @param ctx
 	 * @param AD_Scheduler_ID
 	 * @return MScheduler
@@ -612,16 +618,21 @@ public class Scheduler extends AdempiereServer
 	protected static MScheduler get(Properties ctx, int AD_Scheduler_ID)
 	{
 		Integer key = Integer.valueOf(AD_Scheduler_ID);
-		MScheduler retValue = (MScheduler)s_cache.get(key);
+		MScheduler retValue = s_cache.get(ctx, key, e -> new MScheduler(ctx, e));
 		if (retValue == null)
 		{
-			retValue = new MScheduler(ctx, AD_Scheduler_ID, null);
+			retValue = new MScheduler(ctx, AD_Scheduler_ID, (String)null);
 			if (AD_Scheduler_ID == 0)
 			{
 				String trxName = null;
 				retValue.load(trxName);	//	load System Record
 			}
-			s_cache.put(key, retValue);
+			if (retValue.get_ID() == AD_Scheduler_ID)
+			{
+				s_cache.put(key, retValue, e -> new MScheduler(Env.getCtx(), e));
+				return retValue;
+			}
+			return null;
 		}
 		return retValue;
 	}	//	get

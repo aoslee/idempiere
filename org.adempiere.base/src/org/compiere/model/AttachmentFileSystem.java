@@ -170,9 +170,9 @@ public class AttachmentFileSystem implements IAttachmentStore {
 		if (data.length == 0)
 			return true;
 
-		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-
 		try {
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 			final DocumentBuilder builder = factory.newDocumentBuilder();
 			final Document document = builder.parse(new ByteArrayInputStream(data));
 			final NodeList entries = document.getElementsByTagName("entry");
@@ -288,7 +288,8 @@ public class AttachmentFileSystem implements IAttachmentStore {
 			}
 		}
 		attach.m_items.remove(index);
-		attach.saveEx(); // must save here as the operation cannot be rolled back on filesystem
+		if (attach.get_ID() > 0) // the attachment has not been deleted
+			attach.saveEx(); // must save here as the operation cannot be rolled back on filesystem
 		if (log.isLoggable(Level.CONFIG)) log.config("Index=" + index + " - NewSize=" + attach.m_items.size());
 		return true;
 	}

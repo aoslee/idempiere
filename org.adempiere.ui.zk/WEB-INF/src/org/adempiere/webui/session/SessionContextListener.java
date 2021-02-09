@@ -237,13 +237,18 @@ public class SessionContextListener implements ExecutionInit,
 			return;
 		}
 		
+		Object sessionInvalidated = desktop.getAttribute(AdempiereWebUI.DESKTOP_SESSION_INVALIDATED_ATTR);
+		if (sessionInvalidated != null) {
+			return;
+		}
+		
 		if (ServerContext.getCurrentInstance().isEmpty() || !isContextValid())
     	{
 			setupExecutionContextFromSession(Executions.getCurrent());
 			if (Env.getCtx().getProperty(SERVLET_SESSION_ID) == null)
 				return;
     	}
-		int AD_Session_ID = Env.getContextAsInt(Env.getCtx(), "#AD_Session_ID");
+		int AD_Session_ID = Env.getContextAsInt(Env.getCtx(), Env.AD_SESSION_ID);
 		if (AD_Session_ID > 0) {
 			String key = getSessionDesktopListKey(AD_Session_ID);
 			@SuppressWarnings("unchecked")
@@ -320,7 +325,7 @@ public class SessionContextListener implements ExecutionInit,
 		} 
 	}
 	
-	public static void addDesktopId(int AD_Session_ID, String dtid)
+	public static synchronized void addDesktopId(int AD_Session_ID, String dtid)
 	{
 		String key = getSessionDesktopListKey(AD_Session_ID);
 		@SuppressWarnings("unchecked")

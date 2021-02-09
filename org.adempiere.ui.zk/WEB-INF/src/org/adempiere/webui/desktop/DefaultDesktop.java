@@ -31,13 +31,11 @@ import org.adempiere.base.event.EventManager;
 import org.adempiere.base.event.IEventManager;
 import org.adempiere.base.event.IEventTopics;
 import org.adempiere.model.MBroadcastMessage;
-import org.adempiere.util.ServerContext;
 import org.adempiere.webui.ClientInfo;
 import org.adempiere.webui.LayoutUtils;
 import org.adempiere.webui.adwindow.ADWindow;
 import org.adempiere.webui.apps.AEnv;
 import org.adempiere.webui.apps.BusyDialog;
-import org.adempiere.webui.apps.DesktopRunnable;
 import org.adempiere.webui.apps.ProcessDialog;
 import org.adempiere.webui.apps.WReport;
 import org.adempiere.webui.component.Tab;
@@ -54,15 +52,11 @@ import org.adempiere.webui.panel.BroadcastMessageWindow;
 import org.adempiere.webui.panel.HeaderPanel;
 import org.adempiere.webui.panel.HelpController;
 import org.adempiere.webui.panel.TimeoutPanel;
-import org.adempiere.webui.session.SessionContextListener;
 import org.adempiere.webui.session.SessionManager;
 import org.adempiere.webui.theme.ThemeManager;
-import org.adempiere.webui.util.IServerPushCallback;
-import org.adempiere.webui.util.ServerPushTemplate;
 import org.adempiere.webui.util.UserPreference;
 import org.adempiere.webui.util.ZKUpdateUtil;
 import org.adempiere.webui.window.FDialog;
-import org.compiere.Adempiere;
 import org.compiere.model.GridField;
 import org.compiere.model.GridTab;
 import org.compiere.model.I_AD_Preference;
@@ -71,6 +65,7 @@ import org.compiere.model.MPreference;
 import org.compiere.model.MQuery;
 import org.compiere.model.MRole;
 import org.compiere.model.MTable;
+import org.compiere.model.MTreeFavorite;
 import org.compiere.model.Query;
 import org.compiere.model.SystemIDs;
 import org.compiere.model.X_AD_CtxHelp;
@@ -338,7 +333,7 @@ public class DefaultDesktop extends TabbedDesktop implements MenuListener, Seria
         	btn.setIconSclass("z-icon-remove");
         	btn.addEventListener(Events.ON_CLICK, evt -> eastPopup.close());
         	eastPopup.appendChild(btn);
-        	btn.setStyle("position: absolute; top: 4px; right: 4px; padding: 2px 6px;");
+        	btn.setStyle("position: absolute; top: 20px; right: 0px; padding: 2px 0px;");
         	eastPopup.setStyle("padding-top: 20px;");
         	eastPopup.appendChild(content);
         	eastPopup.setPage(getComponent().getPage());
@@ -382,30 +377,10 @@ public class DefaultDesktop extends TabbedDesktop implements MenuListener, Seria
     		layout.getDesktop().enableServerPush(true);
     	}
 
-        Runnable runnable = new Runnable() {
-			public void run() {
-				try {
-					Thread.sleep(100);
-				} catch (InterruptedException e) {}
-
-				IServerPushCallback callback = new IServerPushCallback() {
-					public void updateUI() {
-						Properties ctx = (Properties)layout.getDesktop().getSession().getAttribute(SessionContextListener.SESSION_CTX);
-						try {
-							ServerContext.setCurrentInstance(ctx);
-							renderHomeTab();
-							automaticOpen(ctx);
-						} finally {
-							ServerContext.dispose();
-						}
-					}
-				};
-				ServerPushTemplate template = new ServerPushTemplate(layout.getDesktop());
-				template.executeAsync(callback);
-			}
-		};
-
-		Adempiere.getThreadPoolExecutor().submit(new DesktopRunnable(runnable,layout.getDesktop()));
+        Executions.schedule(layout.getDesktop(), event -> {
+        	renderHomeTab();
+        	automaticOpen(Env.getCtx());
+        }, new Event("onRenderHomeTab"));        
 
 		ToolBar toolbar = windowContainer.getToobar();
       
@@ -489,13 +464,14 @@ public class DefaultDesktop extends TabbedDesktop implements MenuListener, Seria
         	int userId = Env.getAD_User_ID(Env.getCtx());
         	MPreference preference = query.setOnlyActiveRecords(true)
         			.setApplyAccessFilter(true)
+        			.setClient_ID()
         			.setParameters("SideController.Width", userId)
         			.first();
         	
         	if ( preference == null || preference.getAD_Preference_ID() <= 0 ) {
         		
         		preference = new MPreference(Env.getCtx(), 0, null);
-        		preference.set_ValueOfColumn("AD_User_ID", userId); // required set_Value for System=0 user
+        		preference.setAD_User_ID(userId); // allow System
         		preference.setAttribute("SideController.Width");
         	}
         	preference.setValue(width);
@@ -532,13 +508,14 @@ public class DefaultDesktop extends TabbedDesktop implements MenuListener, Seria
         	int userId = Env.getAD_User_ID(Env.getCtx());
         	MPreference preference = query.setOnlyActiveRecords(true)
         			.setApplyAccessFilter(true)
+        			.setClient_ID()
         			.setParameters("HelpController.Width", userId)
         			.first();
         	
         	if ( preference == null || preference.getAD_Preference_ID() <= 0 ) {
         		
         		preference = new MPreference(Env.getCtx(), 0, null);
-        		preference.set_ValueOfColumn("AD_User_ID", userId); // required set_Value for System=0 user
+        		preference.setAD_User_ID(userId); // allow System
         		preference.setAttribute("HelpController.Width");
         	}
         	preference.setValue(width);
@@ -603,7 +580,7 @@ public class DefaultDesktop extends TabbedDesktop implements MenuListener, Seria
         		westPopup.removeAttribute(POPUP_OPEN_ATTR);
         	});
         	westPopup.appendChild(btn);
-        	btn.setStyle("position: absolute; top: 4px; right: 4px; padding: 2px 6px;");
+        	btn.setStyle("position: absolute; top: 10px; right: 0px; padding: 2px 0px;");
 		}
 		logo = pnlHead.getLogo();
 		if (mobile && logo != null)
@@ -1072,13 +1049,13 @@ public class DefaultDesktop extends TabbedDesktop implements MenuListener, Seria
 		if (isActionURL())  // IDEMPIERE-2334 vs IDEMPIERE-3000 - do not open windows when coming from an action URL
 			return;
 
-		StringBuilder sql = new StringBuilder("SELECT m.Action, COALESCE(m.AD_Window_ID, m.AD_Process_ID, m.AD_Form_ID, m.AD_Workflow_ID, m.AD_Task_ID, AD_InfoWindow_ID) ")
-		.append(" FROM AD_TreeBar tb")
-		.append(" INNER JOIN AD_Menu m ON (tb.Node_ID = m.AD_Menu_ID)")
-		.append(" WHERE tb.AD_Tree_ID = ").append(getMenuID())
-		.append(" AND tb.AD_User_ID = ").append(Env.getAD_User_ID(ctx))
-		.append(" AND tb.IsActive = 'Y' AND tb.LoginOpenSeqNo > 0")
-		.append(" ORDER BY tb.LoginOpenSeqNo");
+		StringBuilder sql = new StringBuilder("SELECT m.Action, COALESCE(m.AD_Window_ID, m.AD_Process_ID, m.AD_Form_ID, m.AD_Workflow_ID, m.AD_Task_ID, m.AD_InfoWindow_ID) ")
+		.append(" FROM AD_Tree_Favorite_Node tfn ")
+		.append(" INNER JOIN AD_Menu m ON (tfn.AD_Menu_ID = m.AD_Menu_ID) ")
+		.append(" WHERE tfn.AD_Tree_Favorite_ID = ")
+		.append(MTreeFavorite.getFavoriteTreeID(Env.getAD_User_ID(Env.getCtx())))
+		.append(" AND tfn.IsActive = 'Y' AND tfn.LoginOpenSeqNo >= 0 ")
+		.append(" ORDER BY tfn.LoginOpenSeqNo ");
 
 		List<List<Object>> rows = DB.getSQLArrayObjectsEx(null, sql.toString());
 		if (rows != null && rows.size() > 0) {

@@ -158,15 +158,15 @@ public class MStorageReservation extends X_M_StorageReservation {
 	}	//	getOfProduct
 
 	/**
-	 * Get Quantity Reserved of Warehouse
+	 * Get Quantity Reserved/Ordered of Warehouse
 	 * @param M_Product_ID
 	 * @param M_Warehouse_ID
 	 * @param M_AttributeSetInstance_ID
 	 * @param isSOTrx - true to get reserved, false to get ordered
 	 * @param trxName
-	 * @return
+	 * @return quantity reserved/ordered
 	 */
-	private static BigDecimal getQty(int M_Product_ID, int M_Warehouse_ID, int M_AttributeSetInstance_ID, boolean isSOTrx, String trxName) {
+	public static BigDecimal getQty(int M_Product_ID, int M_Warehouse_ID, int M_AttributeSetInstance_ID, boolean isSOTrx, String trxName) {
 		ArrayList<Object> params = new ArrayList<Object>();
 		StringBuilder sql = new StringBuilder();
 		sql.append(" SELECT SUM(Qty) FROM M_StorageReservation sr")
@@ -183,7 +183,7 @@ public class MStorageReservation extends X_M_StorageReservation {
 			params.add(M_AttributeSetInstance_ID);
 		}
 
-		BigDecimal qty = DB.getSQLValueBD(trxName, sql.toString(), params);
+		BigDecimal qty = DB.getSQLValueBDEx(trxName, sql.toString(), params);
 		if (qty==null)
 			qty = Env.ZERO;
 
@@ -261,7 +261,7 @@ public class MStorageReservation extends X_M_StorageReservation {
 	 * @param addition
 	 */
 	public void addQty(BigDecimal addition) {
-		final String sql = "UPDATE M_StorageReservation SET Qty=Qty+?, Updated=SYSDATE, UpdatedBy=? " +
+		final String sql = "UPDATE M_StorageReservation SET Qty=Qty+?, Updated=getDate(), UpdatedBy=? " +
 				"WHERE M_Product_ID=? AND M_Warehouse_ID=? AND M_AttributeSetInstance_ID=? AND IsSOTrx=?";
 		DB.executeUpdateEx(sql, 
 			new Object[] {addition, Env.getAD_User_ID(Env.getCtx()), getM_Product_ID(), getM_Warehouse_ID(), getM_AttributeSetInstance_ID(), isSOTrx()}, 
@@ -328,7 +328,7 @@ public class MStorageReservation extends X_M_StorageReservation {
 	 */
 	public String toString()
 	{
-		StringBuffer sb = new StringBuffer("MStorageReservation[")
+		StringBuilder sb = new StringBuilder("MStorageReservation[")
 			.append("M_Warehouse_ID=").append(getM_Warehouse_ID())
 			.append(",M_Product_ID=").append(getM_Product_ID())
 			.append(",M_AttributeSetInstance_ID=").append(getM_AttributeSetInstance_ID())

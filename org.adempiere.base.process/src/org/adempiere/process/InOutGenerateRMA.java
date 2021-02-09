@@ -78,7 +78,7 @@ public class InOutGenerateRMA extends SvrProcess
                 log.log(Level.SEVERE, "Unknown Parameter: " + name);
         }
         
-        m_movementDate = Env.getContextAsDate(getCtx(), "#Date");
+        m_movementDate = Env.getContextAsDate(getCtx(), Env.DATE);
         if (m_movementDate == null)
         {
             m_movementDate = new Timestamp(System.currentTimeMillis());
@@ -249,7 +249,7 @@ public class InOutGenerateRMA extends SvrProcess
         	log.log(Level.WARNING, msglog.toString());
         }
         
-        StringBuffer processMsg = new StringBuffer().append(shipment.getDocumentNo());
+        StringBuilder processMsg = new StringBuilder().append(shipment.getDocumentNo());
         
         if (!shipment.processIt(p_docAction))
         {

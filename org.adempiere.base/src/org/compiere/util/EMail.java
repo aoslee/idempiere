@@ -252,7 +252,8 @@ public final class EMail implements Serializable
 			return m_sentMsg;
 		}
 		//
-		Properties props = System.getProperties();
+		Properties props = new Properties();
+		props.putAll(System.getProperties());
 		props.put("mail.store.protocol", "smtp");
 		props.put("mail.transport.protocol", "smtp");
 		props.put("mail.host", m_smtpHost);
@@ -443,7 +444,7 @@ public final class EMail implements Serializable
 								msg = msg.substring(0, index);
 							String cc = "??";
 							if (m_ctx != null)
-								cc = m_ctx.getProperty("#AD_Client_ID");
+								cc = m_ctx.getProperty(Env.AD_CLIENT_ID);
 							msg += " - AD_Client_ID=" + cc;
 						}
 						String className = ex.getClass().getName();
@@ -880,7 +881,7 @@ public final class EMail implements Serializable
 	public void setMessageHTML (String subject, String message)
 	{
 		m_subject = subject;
-		StringBuffer sb = new StringBuffer("<HTML>\n")
+		StringBuilder sb = new StringBuilder("<HTML>\n")
 				.append("<HEAD>\n")
 				.append("<TITLE>\n")
 				.append(subject + "\n")

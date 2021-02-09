@@ -27,6 +27,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 import org.adempiere.exceptions.AdempiereException;
 import org.apache.tools.ant.Project;
@@ -57,7 +58,7 @@ public class MAttachment extends X_AD_Attachment
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = -8261865873158774665L;
+	private static final long serialVersionUID = -1685512419870004665L;
 
 	/**
 	 * 
@@ -135,6 +136,17 @@ public class MAttachment extends X_AD_Attachment
 		super(ctx, rs, trxName);
 		initAttachmentStoreDetails(ctx, trxName);
 	}	//	MAttachment
+	
+	/**
+	 * Copy constructor
+	 * @param copy
+	 */
+	public MAttachment(MAttachment copy)
+	{
+		this(Env.getCtx(), 0, (String)null);
+		copyPO(copy);
+		this.m_items = copy.m_items != null ? copy.m_items.stream().map(MAttachmentEntry::new).collect(Collectors.toCollection(ArrayList::new)) : null;
+	}
 	
 	/** Indicator for no data   */
 	public static final String 	NONE = ".";
@@ -503,27 +515,19 @@ public class MAttachment extends X_AD_Attachment
 	}	//	beforeSave
 
 	/**
-	 * 	Executed before Delete operation.
-	 *	@return true if record can be deleted
-	 */
-	protected boolean beforeDelete ()
-	{
-		return deleteLOBData();
-	}
-	
-	/**
 	 * 	Delete Entry Data in Zip File format
 	 *	@return true if saved
 	 */
-	private boolean deleteLOBData()
+	@Override
+	protected boolean postDelete()
 	{
 		if (m_items == null)
 			loadLOBData();
 		IAttachmentStore prov = provider.getAttachmentStore();
 		if (prov != null)
 			return prov.delete(this,provider);
-		return false;
-	} 	//	beforeDelete
+		return true;
+	} 	//	postDelete
 	
 	/**************************************************************************
 	 * 	Test
@@ -693,4 +697,14 @@ public class MAttachment extends X_AD_Attachment
 		
 		return destZipFile;
 	}
+
+	/**
+	 * Set Storage Provider
+	 * Used temporarily for the process to migrate storage provider
+	 * @param Storage provider
+	 */
+	public void setStorageProvider(MStorageProvider p) {
+		provider = p;
+	}
+
 }	//	MAttachment

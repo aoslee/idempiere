@@ -177,9 +177,9 @@ public class ImportInventory extends SvrProcess implements ImportProcess
 		if (p_MovementDate != null)
 			sql.append(" MovementDate = COALESCE (MovementDate,").append (DB.TO_DATE(p_MovementDate)).append ("),");
 		sql.append(" IsActive = COALESCE (IsActive, 'Y'),")
-			  .append(" Created = COALESCE (Created, SysDate),")
+			  .append(" Created = COALESCE (Created, getDate()),")
 			  .append(" CreatedBy = COALESCE (CreatedBy, 0),")
-			  .append(" Updated = COALESCE (Updated, SysDate),")
+			  .append(" Updated = COALESCE (Updated, getDate()),")
 			  .append(" UpdatedBy = COALESCE (UpdatedBy, 0),")
 			  .append(" I_ErrorMsg = ' ',")
 			  .append(" M_Warehouse_ID = NULL,")	//	reset
@@ -321,7 +321,7 @@ public class ImportInventory extends SvrProcess implements ImportProcess
 		//	Excluding quantities
 		sql = new StringBuilder ("UPDATE I_Inventory ")
 			.append("SET I_IsImported='E', I_ErrorMsg=I_ErrorMsg||'ERR=Excluding quantities, ' ")
-			.append("WHERE COALESCE(QtyInternalUse,0)<>0 AND (COALESCE(QtyCount,0)<>0 OR COALESCE(QtyBook,0)<>0) ")
+			.append("WHERE NVL(QtyInternalUse,0)<>0 AND (NVL(QtyCount,0)<>0 OR NVL(QtyBook,0)<>0) ")
 			.append(" AND I_IsImported<>'Y'").append (clientCheck);
 		no = DB.executeUpdate (sql.toString (), get_TrxName());
 		if (no != 0)
@@ -330,7 +330,7 @@ public class ImportInventory extends SvrProcess implements ImportProcess
 		//	Required charge for internal use
 		sql = new StringBuilder ("UPDATE I_Inventory ")
 			.append("SET I_IsImported='E', I_ErrorMsg=I_ErrorMsg||'ERR=Required charge, ' ")
-			.append("WHERE COALESCE(QtyInternalUse,0)<>0 AND COALESCE(C_Charge_ID,0)=0 ")
+			.append("WHERE NVL(QtyInternalUse,0)<>0 AND NVL(C_Charge_ID,0)=0 ")
 			.append(" AND I_IsImported<>'Y'").append (clientCheck);
 		no = DB.executeUpdate (sql.toString (), get_TrxName());
 		if (no != 0)
@@ -351,12 +351,9 @@ public class ImportInventory extends SvrProcess implements ImportProcess
 		sql = new StringBuilder ("SELECT * FROM I_Inventory ")
 			.append("WHERE I_IsImported='N'").append (clientCheck)
 			.append(" ORDER BY M_Warehouse_ID, TRUNC(MovementDate), I_Inventory_ID");
-		PreparedStatement pstmt = null;
-		ResultSet rs = null;
-		try
+		try (PreparedStatement pstmt = DB.prepareStatement (sql.toString (), get_TrxName());)
 		{
-			pstmt = DB.prepareStatement (sql.toString (), get_TrxName());
-			rs = pstmt.executeQuery ();
+			ResultSet rs = pstmt.executeQuery ();
 			//
 			int x_M_Warehouse_ID = -1;
 			int x_C_DocType_ID = -1;
@@ -487,15 +484,10 @@ public class ImportInventory extends SvrProcess implements ImportProcess
 		{
 			throw new AdempiereException(e);
 		}
-		finally
-		{
-			DB.close(rs, pstmt);
-			rs = null; pstmt = null;
-		}
 
 		//	Set Error to indicator to not imported
 		sql = new StringBuilder ("UPDATE I_Inventory ")
-			.append("SET I_IsImported='N', Updated=SysDate ")
+			.append("SET I_IsImported='N', Updated=getDate() ")
 			.append("WHERE I_IsImported<>'Y'").append(clientCheck);
 		no = DB.executeUpdate(sql.toString(), get_TrxName());
 		addLog (0, null, new BigDecimal (no), "@Errors@");
